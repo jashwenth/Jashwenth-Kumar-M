@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cp-bg: #F7F6F2;
+  --color-cp-surface: #FFFFFF;
+  --color-cp-dark: #1A1A1A;
+  --color-cp-accent: #4F8A4D;
+  --color-cp-accent-hover: #3D7A3B;
+  --color-cp-moss: #7FA36B;
+  --color-cp-lime: #C8E64D;
+  --color-cp-text: #1A1A1A;
+  --color-cp-text-secondary: #6B7280;
+  --color-cp-border: #E5E5E0;
+  --color-severity-low: #22c55e;
+  --color-severity-medium: #eab308;
+  --color-severity-high: #f97316;
+  --color-severity-critical: #ef4444;
+  --color-status-open: #ef4444;
+  --color-status-in-progress: #eab308;
+  --color-status-fixed: #22c55e;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--color-cp-bg);
+  color: var(--color-cp-text);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4, h5, h6 { font-family: 'Lexend', system-ui, sans-serif; }
+
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.glass-dark {
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.brutal-border { border: 2px solid var(--color-cp-dark); }
+.brutal-shadow { box-shadow: 4px 4px 0px var(--color-cp-dark); }
+.section-padding { padding: 6rem 1.5rem; }
+@media (min-width: 768px) { .section-padding { padding: 8rem 2rem; } }
+.font-mono-id { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+@keyframes blob-move { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(30px,-40px) scale(1.05)} 66%{transform:translate(-20px,20px) scale(0.95)} }
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-blob { animation: blob-move 12s ease-in-out infinite; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c4c4be; border-radius: 3px; }

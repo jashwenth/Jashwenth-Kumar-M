@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CampusPulse 3D Scene</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#4a4d44}
+canvas{display:block;width:100vw;height:100vh;position:fixed;top:0;left:0}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}
+</script>
+<script type="module">
+import*as THREE from'three';
+import{EffectComposer}from'three/addons/postprocessing/EffectComposer.js';
+import{RenderPass}from'three/addons/postprocessing/RenderPass.js';
+import{UnrealBloomPass}from'three/addons/postprocessing/UnrealBloomPass.js';
+
+/* ═══════════════════════════════════════════════════════════════
+   CampusPulse — Living Green 3D Hero Scene
+   Organic moss terrain with floating particles and volumetric light
+   ═══════════════════════════════════════════════════════════════ */
+
+const canvas=document.getElementById('gl');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x4a4d44,0.012);
+
+const camera=new THREE.PerspectiveCamera(55,window.innerWidth/window.innerHeight,0.1,200);
+camera.position.set(0,3,12);
+camera.lookAt(0,0,0);
+
+/* ── Noise functions ─────────────────────────────────────────── */
+function hash(n){return Math.sin(n)*43758.5453123%1}
+function noise3D(x,y,z){
+  const ix=Math.floor(x),iy=Math.floor(y),iz=Math.floor(z);
+  const fx=x-ix,fy=y-iy,fz=z-iz;
+  const ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy),uz=fz*fz*(3-2*fz);
+  const n=ix+iy*157+iz*113;
+  const a=hash(n),b=hash(n+1),c=hash(n+157),d=hash(n+158);
+  const e=hash(n+113),f=hash(n+114),g=hash(n+270),h=hash(n+271);
+  const x1=a+(b-a)*ux,x2=c+(d-c)*ux,x3=e+(f-e)*ux,x4=g+(h-g)*ux;
+  const y1=x1+(x2-x1)*uy,y2=x3+(x4-x3)*uy;
+  return y1+(y2-y1)*uz;
+}
+function fbm(x,y,z,oct=5){
+  let val=0,amp=0.5,freq=1;
+  for(let i=0;i<oct;i++){val+=amp*noise3D(x*freq,y*freq,z*freq);amp*=0.5;freq*=2}
+  return val;
+}
+
+/* ── Lighting ────────────────────────────────────────────────── */
+const ambientLight=new THREE.AmbientLight(0x5a6b4a,0.6);
+scene.add(ambientLight);
+
+const sunLight=new THREE.DirectionalLight(0xeef3e7,1.8);
+sunLight.position.set(-5,12,8);
+sunLight.castShadow=false;
+scene.add(sunLight);
+
+const fillLight=new THREE.DirectionalLight(0x8aaa6f,0.4);
+fillLight.position.set(5,3,-5);
+scene.add(fillLight);
+
+const warmLight=new THREE.PointLight(0xeee8d5,1.2,25);
+warmLight.position.set(-2,1,4);
+scene.add(warmLight);
+
+const volumetricLight=new THREE.SpotLight(0xeef3e7,2.5,30,Math.PI/5,0.6);
+volumetricLight.position.set(-4,15,6);
+volumetricLight.target.position.set(0,-1,0);
+scene.add(volumetricLight);
+scene.add(volumetricLight.target);
+
+/* ── Ground terrain ──────────────────────────────────────────── */
+const terrainGeo=new THREE.PlaneGeometry(40,40,200,200);
+const positions=terrainGeo.attributes.position;
+for(let i=0;i<positions.count;i++){
+  const x=positions.getX(i),z=positions.getY(i);
+  const h=fbm(x*0.15,z*0.15,0,6)*3.5-1.8;
+  positions.setZ(i,h);
+}
+terrainGeo.computeVertexNormals();
+const terrainMat=new THREE.MeshStandardMaterial({
+  color:0x4a6b3a,roughness:0.95,metalness:0.02,
+  flatShading:false,
+});
+const terrain=new THREE.Mesh(terrainGeo,terrainMat);
+terrain.rotation.x=-Math.PI/2;
+terrain.position.y=-3;
+scene.add(terrain);
+
+/* ── Organic moss roots ──────────────────────────────────────── */
+function createRoot(radius,height,segments,noiseScale,noiseAmp,color){
+  const geo=new THREE.CylinderGeometry(radius*0.7,radius,height,segments,40,true);
+  const pos=geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    const angle=Math.atan2(z,x);
+    const n=fbm(angle*2+y*noiseScale,y*noiseScale*0.5,0,4)*noiseAmp;
+    const r=Math.sqrt(x*x+z*z)+n;
+    pos.setX(i,Math.cos(angle)*r);
+    pos.setZ(i,Math.sin(angle)*r);
+  }
+  geo.computeVertexNormals();
+  const mat=new THREE.MeshStandardMaterial({color,roughness:0.92,metalness:0.03,flatShading:false});
+  return new THREE.Mesh(geo,mat);
+}
+
+// Main root arch
+const rootArch=createRoot(1.2,8,32,0.6,0.45,0x3d5a2d);
+rootArch.position.set(-1,-2.5,0);
+rootArch.rotation.z=0.15;
+scene.add(rootArch);
+
+// Secondary roots
+const root2=createRoot(0.6,5,20,0.8,0.3,0x4a6b3a);
+root2.position.set(2,-3,-1);
+root2.rotation.z=-0.3;
+root2.rotation.x=0.2;
+scene.add(root2);
+
+const root3=createRoot(0.4,4,16,1.0,0.25,0x567a45);
+root3.position.set(-3,-3,1);
+root3.rotation.z=0.4;
+root3.rotation.x=-0.15;
+scene.add(root3);
+
+/* ── Moss blobs ──────────────────────────────────────────────── */
+function createMossBlob(radius,detail,pos,color){
+  const geo=new THREE.IcosahedronGeometry(radius,detail);
+  const positions=geo.attributes.position;
+  for(let i=0;i<positions.count;i++){
+    const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i);
+    const n=fbm(x*1.8,y*1.8,z*1.8,4)*radius*0.4;
+    const len=Math.sqrt(x*x+y*y+z*z);
+    const scale=(len+n)/len;
+    positions.setX(i,x*scale);
+    positions.setY(i,y*scale);
+    positions.setZ(i,z*scale);
+  }
+  geo.computeVertexNormals();
+  const mat=new THREE.MeshStandardMaterial({color,roughness:0.88,metalness:0.02});
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.position.set(...pos);
+  return mesh;
+}
+
+const mossBlobData=[
+  [1.5,3,[0,1.5,0],0x5a7d48],
+  [0.8,3,[-2,0.5,1],0x4a6b3a],
+  [0.6,3,[2.5,0,-1.5],0x6b8a55],
+  [1.0,3,[-1,-0.5,-2],0x3d5a2d],
+  [0.5,3,[3,1.2,0.5],0x7a9a65],
+  [0.7,3,[-3,0.2,2],0x4a6b3a],
+  [0.4,2,[1.5,-1,2.5],0x567a45],
+  [0.9,3,[0.5,-0.8,-3],0x5a7d48],
+];
+mossBlobData.forEach(d=>scene.add(createMossBlob(...d)));
+
+/* ── Floating particles (pollen/spores) ──────────────────────── */
+const particleCount=800;
+const particleGeo=new THREE.BufferGeometry();
+const particlePositions=new Float32Array(particleCount*3);
+const particleSpeeds=new Float32Array(particleCount);
+const particleSizes=new Float32Array(particleCount);
+
+for(let i=0;i<particleCount;i++){
+  particlePositions[i*3]=(Math.random()-0.5)*30;
+  particlePositions[i*3+1]=Math.random()*15-3;
+  particlePositions[i*3+2]=(Math.random()-0.5)*30;
+  particleSpeeds[i]=0.002+Math.random()*0.008;
+  particleSizes[i]=0.03+Math.random()*0.06;
+}
+particleGeo.setAttribute('position',new THREE.BufferAttribute(particlePositions,3));
+particleGeo.setAttribute('size',new THREE.BufferAttribute(particleSizes,1));
+
+const particleMat=new THREE.PointsMaterial({
+  color:0xeef3e7,size:0.08,transparent:true,opacity:0.6,
+  blending:THREE.AdditiveBlending,sizeAttenuation:true,
+  depthWrite:false
+});
+const particles=new THREE.Points(particleGeo,particleMat);
+scene.add(particles);
+
+/* ── Glowing fireflies ───────────────────────────────────────── */
+const fireflyCount=25;
+const fireflyGeo=new THREE.BufferGeometry();
+const fireflyPos=new Float32Array(fireflyCount*3);
+const fireflySpeeds=[];
+for(let i=0;i<fireflyCount;i++){
+  fireflyPos[i*3]=(Math.random()-0.5)*16;
+  fireflyPos[i*3+1]=Math.random()*6-1;
+  fireflyPos[i*3+2]=(Math.random()-0.5)*16;
+  fireflySpeeds.push({x:Math.random()*0.5,y:Math.random()*0.3,z:Math.random()*0.5,phase:Math.random()*Math.PI*2});
+}
+fireflyGeo.setAttribute('position',new THREE.BufferAttribute(fireflyPos,3));
+const fireflyMat=new THREE.PointsMaterial({
+  color:0xc8e64d,size:0.15,transparent:true,opacity:0.8,
+  blending:THREE.AdditiveBlending,sizeAttenuation:true,depthWrite:false
+});
+const fireflies=new THREE.Points(fireflyGeo,fireflyMat);
+scene.add(fireflies);
+
+/* ── Volumetric light rays (god rays approximation) ──────────── */
+const rayGeo=new THREE.CylinderGeometry(0,3,15,6,1,true);
+const rayMat=new THREE.MeshBasicMaterial({
+  color:0xeef3e7,transparent:true,opacity:0.03,
+  blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false
+});
+for(let i=0;i<3;i++){
+  const ray=new THREE.Mesh(rayGeo,rayMat.clone());
+  ray.position.set(-4+i*3,7,3-i*2);
+  ray.rotation.x=0.1*i;
+  ray.rotation.z=0.05-0.05*i;
+  scene.add(ray);
+}
+
+/* ── Post-processing ─────────────────────────────────────────── */
+const composer=new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene,camera));
+const bloom=new UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),0.35,0.8,0.7);
+composer.addPass(bloom);
+
+/* ── Mouse tracking ──────────────────────────────────────────── */
+let mouseX=0,mouseY=0,targetX=0,targetY=0;
+document.addEventListener('mousemove',e=>{
+  targetX=(e.clientX/window.innerWidth-0.5)*2;
+  targetY=(e.clientY/window.innerHeight-0.5)*2;
+});
+
+/* ── Animation loop ──────────────────────────────────────────── */
+const clock=new THREE.Clock();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+  const dt=clock.getDelta();
+
+  // Smooth mouse follow
+  mouseX+=(targetX-mouseX)*0.03;
+  mouseY+=(targetY-mouseY)*0.03;
+
+  // Camera subtle movement
+  camera.position.x=mouseX*1.2+Math.sin(t*0.15)*0.3;
+  camera.position.y=3-mouseY*0.5+Math.sin(t*0.2)*0.2;
+  camera.lookAt(0,0.5,0);
+
+  // Animate particles (floating upward drift)
+  const pPos=particles.geometry.attributes.position.array;
+  for(let i=0;i<particleCount;i++){
+    pPos[i*3+1]+=particleSpeeds[i];
+    pPos[i*3]+=Math.sin(t+i)*0.001;
+    pPos[i*3+2]+=Math.cos(t+i*0.7)*0.001;
+    if(pPos[i*3+1]>12){pPos[i*3+1]=-3;pPos[i*3]=(Math.random()-0.5)*30;pPos[i*3+2]=(Math.random()-0.5)*30}
+  }
+  particles.geometry.attributes.position.needsUpdate=true;
+
+  // Animate fireflies (organic wandering)
+  const fPos=fireflies.geometry.attributes.position.array;
+  for(let i=0;i<fireflyCount;i++){
+    const s=fireflySpeeds[i];
+    fPos[i*3]+=Math.sin(t*s.x+s.phase)*0.008;
+    fPos[i*3+1]+=Math.cos(t*s.y+s.phase)*0.005;
+    fPos[i*3+2]+=Math.sin(t*s.z+s.phase*1.3)*0.008;
+  }
+  fireflies.geometry.attributes.position.needsUpdate=true;
+  fireflyMat.opacity=0.5+Math.sin(t*2)*0.3;
+
+  // Gentle moss blob breathing
+  mossBlobData.forEach((d,i)=>{
+    const mesh=scene.children.find(c=>c.isMesh&&c.position.x===d[2][0]&&c.position.z===d[2][2]&&c.geometry.type==='IcosahedronGeometry');
+    if(mesh){
+      const s=1+Math.sin(t*0.5+i*0.7)*0.02;
+      mesh.scale.set(s,s,s);
+    }
+  });
+
+  // Warm light flicker
+  warmLight.intensity=1.2+Math.sin(t*3)*0.15;
+  warmLight.position.x=-2+Math.sin(t*0.4)*0.5;
+
+  composer.render();
+}
+animate();
+
+/* ── Resize handler ──────────────────────────────────────────── */
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  composer.setSize(window.innerWidth,window.innerHeight);
+});
+</script>
+</body>
+</html>

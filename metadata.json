@@ -1,0 +1,8 @@
+{
+  "name": "Remix CampusPulse",
+  "description": "AI-powered campus issue tracker and operational intelligence platform with live incident triage, campus heatmap, and SLA management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
